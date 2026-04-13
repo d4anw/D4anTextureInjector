@@ -22,7 +22,7 @@ class UpdateChecker:
     GITHUB_REPO = "D4anTextureInjector"  # Replace with your repository name
     
     # Current version - should match the version in your app
-    CURRENT_VERSION = "2.2"
+    CURRENT_VERSION = "2.3"
     
     def __init__(self, app_root: tk.Tk, on_update_callback=None):
         """
