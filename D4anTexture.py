@@ -144,7 +144,7 @@ class InjectorApp:
 
         version_label = tk.Label(
             self.center_panel,
-            text="v2.5",
+            text="v2.6",
             font=("Segoe UI", 11),
             fg="#e8c547",
             bg=self.panel_color,
