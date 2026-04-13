@@ -22,7 +22,7 @@ class UpdateChecker:
     GITHUB_REPO = "D4anTextureInjector"  # Replace with your repository name
     
     # Current version - should match the version in your app
-    CURRENT_VERSION = "2.6"
+    CURRENT_VERSION = "2.7"
     
     def __init__(self, app_root: tk.Tk, on_update_callback=None):
         """
@@ -212,10 +212,16 @@ def check_for_updates_on_startup(app_root: tk.Tk) -> None:
         app_root: The root tkinter window
     """
     def _check_thread():
-        checker = UpdateChecker(app_root)
-        if checker.check_for_updates():
-            if checker.show_update_dialog():
-                checker.download_and_install_update()
+        try:
+            checker = UpdateChecker(app_root)
+            if checker.check_for_updates():
+                if checker.show_update_dialog():
+                    checker.download_and_install_update()
+        except Exception as e:
+            # Log errors for debugging, but don't crash the app
+            print(f"Update check error: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Run check in background thread to avoid blocking UI
     thread = threading.Thread(target=_check_thread, daemon=True)

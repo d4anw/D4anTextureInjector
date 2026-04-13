@@ -11,10 +11,14 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
+check_for_updates_on_startup = None
 try:
     from updater import check_for_updates_on_startup
-except ImportError:
-    check_for_updates_on_startup = None
+except Exception as e:
+    # Silently fail if updater not available, but print to console for debugging
+    import traceback
+    print(f"Warning: Update checker not available: {e}")
+    traceback.print_exc()
 
 
 def resource_path(relative_path: str) -> str:
@@ -144,7 +148,7 @@ class InjectorApp:
 
         version_label = tk.Label(
             self.center_panel,
-            text="v2.6",
+            text="v2.7",
             font=("Segoe UI", 11),
             fg="#e8c547",
             bg=self.panel_color,
