@@ -148,7 +148,7 @@ class InjectorApp:
 
         version_label = tk.Label(
             self.center_panel,
-            text="v2.8",
+            text="v2.9",
             font=("Segoe UI", 11),
             fg="#e8c547",
             bg=self.panel_color,
@@ -254,12 +254,10 @@ class InjectorApp:
         
         # Check for updates on startup (runs in background thread)
         if check_for_updates_on_startup:
-            self.status_var.set("Checking for updates...")
+            messagebox.showinfo("Debug", "Update checker function is available and running!")
             check_for_updates_on_startup(self.root)
-            # Reset status after a moment
-            self.root.after(5000, lambda: self.status_var.set("Ready") if self.status_var.get() == "Checking for updates..." else None)
         else:
-            print("Update checker not available for import")
+            messagebox.showerror("Debug", "Update checker NOT available - import failed!")
 
     def _on_resize(self, _event: tk.Event) -> None:
         width = self.root.winfo_width()
