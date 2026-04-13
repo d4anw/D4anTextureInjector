@@ -7,18 +7,153 @@ import os
 import shutil
 import sys
 import threading
+import json
+import subprocess
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from urllib.request import urlopen, Request
+from urllib.error import URLError
 
-check_for_updates_on_startup = None
-try:
-    from updater import check_for_updates_on_startup
-except Exception as e:
-    # Silently fail if updater not available, but print to console for debugging
-    import traceback
-    print(f"Warning: Update checker not available: {e}")
-    traceback.print_exc()
+
+# ============================================================================
+# UPDATE CHECKER - Embedded directly to avoid import issues with PyInstaller
+# ============================================================================
+
+class UpdateChecker:
+    """Handles checking and downloading updates from GitHub Releases."""
+    
+    GITHUB_OWNER = "d4anw"
+    GITHUB_REPO = "D4anTextureInjector"
+    CURRENT_VERSION = "3.0"
+    
+    def __init__(self, app_root: tk.Tk, on_update_callback=None):
+        self.app_root = app_root
+        self.on_update_callback = on_update_callback
+        self.latest_version = None
+        self.update_url = None
+        self.exe_path = self._get_exe_path()
+        
+    @staticmethod
+    def _get_exe_path() -> Path:
+        if getattr(sys, 'frozen', False):
+            return Path(sys.executable)
+        else:
+            dist_exe = Path(__file__).parent / "dist" / "D4anTexture.exe"
+            if dist_exe.exists():
+                return dist_exe
+            return Path(sys.executable)
+    
+    def check_for_updates(self) -> bool:
+        try:
+            api_url = f"https://api.github.com/repos/{self.GITHUB_OWNER}/{self.GITHUB_REPO}/releases/latest"
+            request = Request(api_url, headers={"User-Agent": "D4anTextureUpdater"})
+            with urlopen(request, timeout=5) as response:
+                data = json.loads(response.read().decode())
+                
+            latest_version = data.get("tag_name", "").lstrip("v")
+            if not latest_version:
+                return False
+            
+            self.latest_version = latest_version
+            if self._is_newer_version(latest_version, self.CURRENT_VERSION):
+                for asset in data.get("assets", []):
+                    if asset["name"].endswith(".exe"):
+                        self.update_url = asset["browser_download_url"]
+                        return True
+            return False
+        except Exception as e:
+            print(f"Update check failed: {e}")
+            return False
+    
+    @staticmethod
+    def _is_newer_version(new_version: str, current_version: str) -> bool:
+        try:
+            new_parts = [int(x) for x in new_version.split(".")]
+            current_parts = [int(x) for x in current_version.split(".")]
+            while len(new_parts) < len(current_parts):
+                new_parts.append(0)
+            while len(current_parts) < len(new_parts):
+                current_parts.append(0)
+            return new_parts > current_parts
+        except (ValueError, AttributeError):
+            return False
+    
+    def show_update_dialog(self) -> bool:
+        result = messagebox.askyesno(
+            "Update Available",
+            f"A new version ({self.latest_version}) is available!\n\n"
+            f"Current version: {self.CURRENT_VERSION}\n\n"
+            "Download and install the update?\n\n"
+            "(The application will restart after installing.)",
+        )
+        return result
+    
+    def download_and_install_update(self) -> None:
+        if not self.update_url:
+            return
+        thread = threading.Thread(target=self._download_and_install_thread, daemon=True)
+        thread.start()
+    
+    def _download_and_install_thread(self) -> None:
+        try:
+            temp_exe = self.exe_path.parent / "D4anTexture_new.exe"
+            backup_exe = self.exe_path.parent / "D4anTexture_old.exe"
+            print(f"Downloading update from {self.update_url}...")
+            self._download_file(self.update_url, str(temp_exe))
+            
+            batch_script = self.exe_path.parent / "update_install.bat"
+            batch_content = f"""@echo off
+REM Wait for the current process to exit
+timeout /t 3 /nobreak
+REM Backup old exe
+if exist "{self.exe_path}" (
+    move /Y "{self.exe_path}" "{backup_exe}"
+)
+REM Move new exe to proper location
+move /Y "{temp_exe}" "{self.exe_path}"
+REM Start the updated app
+start "" "{self.exe_path}"
+REM Clean up batch file
+(goto) 2>nul & del "%~f0"
+"""
+            batch_script.write_text(batch_content)
+            subprocess.Popen(
+                f'cmd.exe /c "{batch_script}"',
+                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+            self.app_root.quit()
+            sys.exit(0)
+        except Exception as e:
+            messagebox.showerror("Update Failed", f"Failed to download and install update:\n{str(e)}\n\nPlease try again later.")
+    
+    @staticmethod
+    def _download_file(url: str, destination: str) -> None:
+        request = Request(url, headers={"User-Agent": "D4anTextureUpdater"})
+        with urlopen(request, timeout=30) as response:
+            with open(destination, 'wb') as out_file:
+                out_file.write(response.read())
+
+
+def check_for_updates_on_startup(app_root: tk.Tk) -> None:
+    def _check_thread():
+        try:
+            checker = UpdateChecker(app_root)
+            if checker.check_for_updates():
+                if checker.show_update_dialog():
+                    checker.download_and_install_update()
+        except Exception as e:
+            print(f"Update check error: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    thread = threading.Thread(target=_check_thread, daemon=True)
+    thread.start()
+
+
+# ============================================================================
+# MAIN APPLICATION
+# ============================================================================
 
 
 def resource_path(relative_path: str) -> str:
@@ -44,7 +179,7 @@ class InjectorApp:
     """
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("D4an Texture Injector!")
+        self.root.title("D4an Texture Injector - v3.0")
         self.root.geometry("950x680")
         self.root.minsize(920, 650)
 
@@ -253,11 +388,7 @@ class InjectorApp:
         self._try_load_default_background()
         
         # Check for updates on startup (runs in background thread)
-        if check_for_updates_on_startup:
-            messagebox.showinfo("Debug", "Update checker function is available and running!")
-            check_for_updates_on_startup(self.root)
-        else:
-            messagebox.showerror("Debug", "Update checker NOT available - import failed!")
+        check_for_updates_on_startup(self.root)
 
     def _on_resize(self, _event: tk.Event) -> None:
         width = self.root.winfo_width()
