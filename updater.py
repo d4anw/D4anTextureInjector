@@ -22,7 +22,7 @@ class UpdateChecker:
     GITHUB_REPO = "D4anTextureInjector"  # Replace with your repository name
     
     # Current version - should match the version in your app
-    CURRENT_VERSION = "2.3"
+    CURRENT_VERSION = "2.4"
     
     def __init__(self, app_root: tk.Tk, on_update_callback=None):
         """
@@ -145,30 +145,39 @@ class UpdateChecker:
             from tkinter import messagebox
             
             # Download the update
-            temp_exe = self.exe_path.parent / "D4anTexture_update.exe"
+            temp_exe = self.exe_path.parent / "D4anTexture_new.exe"
+            backup_exe = self.exe_path.parent / "D4anTexture_old.exe"
             
             # Show downloading message
             print(f"Downloading update from {self.update_url}...")
             self._download_file(self.update_url, str(temp_exe))
             
             # Create a batch script to replace the exe and restart
-            batch_script = self.exe_path.parent / "update.bat"
+            # The script will wait for the current process to exit before replacing
+            batch_script = self.exe_path.parent / "update_install.bat"
             batch_content = f"""@echo off
-echo Installing update...
-timeout /t 2
-del "{self.exe_path}"
-ren "{temp_exe}" "D4anTexture.exe"
+REM Wait for the current process to exit
+timeout /t 3 /nobreak
+REM Backup old exe
+if exist "{self.exe_path}" (
+    move /Y "{self.exe_path}" "{backup_exe}"
+)
+REM Move new exe to proper location
+move /Y "{temp_exe}" "{self.exe_path}"
+REM Start the updated app
 start "" "{self.exe_path}"
+REM Clean up batch file
+(goto) 2>nul & del "%~f0"
 """
             batch_script.write_text(batch_content)
             
             # Execute batch script (detached from current process)
             subprocess.Popen(
                 f'cmd.exe /c "{batch_script}"',
-                creationflags=subprocess.CREATE_NEW_CONSOLE
+                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
             )
             
-            # Exit current application
+            # Exit current application (batch script will run after this exits)
             self.app_root.quit()
             sys.exit(0)
             
@@ -176,7 +185,7 @@ start "" "{self.exe_path}"
             from tkinter import messagebox
             messagebox.showerror(
                 "Update Failed",
-                f"Failed to download and install update:\n{str(e)}"
+                f"Failed to download and install update:\n{str(e)}\n\nPlease try again later."
             )
     
     @staticmethod
